@@ -3,7 +3,10 @@ from discord import app_commands
 from discord.ext import commands
 import json
 import time
-import os   # <-- ADD
+import os
+from flask import Flask          # <-- ADDED
+from threading import Thread     # <-- ADDED
+
 # ---------------------------
 # Load admins + bans
 # ---------------------------
@@ -66,11 +69,24 @@ async def ban(interaction: discord.Interaction, userid: str, reason: str):
     if not is_admin(interaction.user.id):
         return await interaction.response.send_message("❌ Ye command admins ke liye hai.", ephemeral=True)
 
-    BANS[userid] = {"type": "perm", "reason": reason}
+    try:
+        user_obj = await bot.fetch_user(int(userid))
+        username = user_obj.name
+        display = user_obj.display_name
+    except:
+        username = "Unknown"
+        display = "Unknown"
+
+    BANS[userid] = {
+        "type": "perm",
+        "reason": reason,
+        "username": username,
+        "display": display
+    }
     save_bans()
 
     await interaction.response.send_message(
-        f"🔨 User `{userid}` permanently banned!\n📄 Reason: {reason}"
+        f"🔨 User `{userid}` permanently banned!\n👤 Username: **{username}**\n🏷 Display: **{display}**\n📄 Reason: {reason}"
     )
 
 # ------------------------------------------------------
@@ -83,11 +99,25 @@ async def tempban(interaction: discord.Interaction, userid: str, minutes: int, r
 
     expire = time.time() + (minutes * 60)
 
-    BANS[userid] = {"type": "temp", "reason": reason, "expire": expire}
+    try:
+        user_obj = await bot.fetch_user(int(userid))
+        username = user_obj.name
+        display = user_obj.display_name
+    except:
+        username = "Unknown"
+        display = "Unknown"
+
+    BANS[userid] = {
+        "type": "temp",
+        "reason": reason,
+        "expire": expire,
+        "username": username,
+        "display": display
+    }
     save_bans()
 
     await interaction.response.send_message(
-        f"⏳ User `{userid}` {minutes} minutes ke liye ban ho gaya.\n📄 Reason: {reason}"
+        f"⏳ User `{userid}` {minutes} minutes ke liye ban ho gaya.\n👤 Username: **{username}**\n🏷 Display: **{display}**\n📄 Reason: {reason}"
     )
 
 # ------------------------------------------------------
@@ -107,8 +137,63 @@ async def unban(interaction: discord.Interaction, userid: str):
     await interaction.response.send_message(f"🟢 User `{userid}` unbanned!")
 
 # ------------------------------------------------------
+# /list  → Saare banned users dikhaye
+# ------------------------------------------------------
+@bot.tree.command(name="list", description="Saare banned users ki list dekhain")
+async def list_bans(interaction: discord.Interaction):
+
+    if not is_admin(interaction.user.id):
+        return await interaction.response.send_message("❌ Ye command admins ke liye hai.", ephemeral=True)
+
+    if len(BANS) == 0:
+        return await interaction.response.send_message("🟢 Koi bhi banned user nahi hai.")
+
+    msg = "🔒 **Banned Users:**\n\n"
+
+    for uid, data in BANS.items():
+        msg += (
+            f"**UserID:** `{uid}`\n"
+            f"👤 **Username:** {data.get('username','N/A')}\n"
+            f"🏷 **Display:** {data.get('display','N/A')}\n"
+            f"📄 **Reason:** {data['reason']}\n\n"
+        )
+
+    await interaction.response.send_message(msg)
+
+# ------------------------------------------------------
+# /clear → Saare bans hatao
+# ------------------------------------------------------
+@bot.tree.command(name="clear", description="Saare banned users ko clear kare (Admin Only)")
+async def clear_bans(interaction: discord.Interaction):
+
+    if not is_admin(interaction.user.id):
+        return await interaction.response.send_message("❌ Ye command admins ke liye hai.", ephemeral=True)
+
+    BANS.clear()
+    save_bans()
+
+    await interaction.response.send_message("🧹 Saare banned users hata diye gaye!")
+
+# ------------------------------------------------------
+# PING SYSTEM (24/7 alive)
+# ------------------------------------------------------
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot Running"
+
+def run():
+    app.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+keep_alive()
+
+# ------------------------------------------------------
 # Start bot (ENV TOKEN)
 # ------------------------------------------------------
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")   # <-- railway/env se lega
-
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 bot.run(TOKEN)
