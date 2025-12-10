@@ -309,7 +309,7 @@ def run_flask():
 # -------------------------
 # RUN
 # -------------------------
-if __name__ == "__main__":
+if __name__ == "__bot__":
     save_all()
     threading.Thread(target=run_flask).start()
     bot.run(DISCORD_TOKEN)
